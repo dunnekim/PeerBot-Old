@@ -1,65 +1,504 @@
 <!DOCTYPE html>
 <html lang="ko">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PeerBot - Market Screener</title>
+    <title>PeerBot - 기업 분석 및 피어 파인더</title>
+    
+    <!-- React & Tailwind Libraries (CDN) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Config -->
     <script>
       tailwind.config = {
         theme: {
           extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-            },
+            fontFamily: { sans: ['Inter', 'sans-serif'] },
             colors: {
-              slate: {
-                850: '#1e293b',
-                900: '#0f172a',
-                950: '#020617',
-              }
+              slate: { 850: '#1e293b', 900: '#0f172a', 950: '#020617' }
             }
           },
         },
       }
     </script>
     <style>
-      body {
-        background-color: #0f172a;
-        color: #e2e8f0;
-      }
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #1e293b; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #475569; 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
-      }
+      body { background-color: #0f172a; color: #e2e8f0; }
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: #1e293b; }
+      ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+      .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
-  <script type="importmap">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script type="importmap">
 {
   "imports": {
-    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.6",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.6",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
   }
 }
 </script>
 </head>
-  <body>
+<body>
     <div id="root"></div>
-  </body>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        const { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } = Recharts;
+
+        // --- 1. ICONS (SVG) ---
+        const Icon = ({ path, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {path}
+            </svg>
+        );
+        const Icons = {
+            Search: (props) => <Icon {...props} path={<><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>} />,
+            Sliders: (props) => <Icon {...props} path={<><line x1="4" x2="20" y1="21" y2="21"/><line x1="4" x2="20" y1="14" y2="14"/><line x1="4" x2="20" y1="7" y2="7"/><circle cx="12" cy="14" r="2"/><circle cx="12" cy="7" r="2"/><circle cx="12" cy="21" r="2"/></>} />,
+            Cpu: (props) => <Icon {...props} path={<><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></>} />,
+            Zap: (props) => <Icon {...props} path={<><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></>} />,
+            Brain: (props) => <Icon {...props} path={<><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.97-3.465"/><path d="M19.97 14.535A4 4 0 0 1 18 18"/></>} />,
+            Filter: (props) => <Icon {...props} path={<><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>} />,
+            Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></>} />,
+            X: (props) => <Icon {...props} path={<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>} />,
+            Bot: (props) => <Icon {...props} path={<><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></>} />,
+            TrendingUp: (props) => <Icon {...props} path={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>} />,
+            AlertTriangle: (props) => <Icon {...props} path={<><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>} />,
+            ChevronRight: (props) => <Icon {...props} path={<><path d="m9 18 6-6-6-6"/></>} />,
+            ChevronLeft: (props) => <Icon {...props} path={<><path d="m15 18-6-6 6-6"/></>} />,
+            FileText: (props) => <Icon {...props} path={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></>} />,
+            Activity: (props) => <Icon {...props} path={<><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></>} />,
+            Key: (props) => <Icon {...props} path={<><path d="m21 2-2 2m-7.6 7.6a6.5 6.5 0 1 1-5.3-5.3"/><circle cx="8" cy="8" r="3"/><path d="M7 17v5"/><path d="M12 17v2"/><path d="M17 12v5"/></>} />
+        };
+
+        // --- 2. MOCK DATA ---
+        const MOCK_DATA = [
+            { corp_code: "00126380", stock_code: "005930", corp_name: "삼성전자", market: "KOSPI", sector: "전기전자", sales: 3022314, op_profit: 433766, net_income: 399074, assets: 4484245, liabilities: 936749, equity: 3547496, market_cap: 4500000, per: 15.2, pbr: 1.4, roe: 11.5, biz_description_raw: "DX부문(모바일, TV), DS부문(메모리, 시스템LSI, 파운드리), SDC, Harman으로 구성. 글로벌 메모리 반도체 시장 점유율 1위 유지." },
+            { corp_code: "00164779", stock_code: "000660", corp_name: "SK하이닉스", market: "KOSPI", sector: "전기전자", sales: 446216, op_profit: 68094, net_income: 22416, assets: 1039754, liabilities: 388523, equity: 651231, market_cap: 950000, per: 22.1, pbr: 1.8, roe: 4.5, biz_description_raw: "DRAM, NAND Flash, MCP 등 메모리 반도체 생산 및 판매. AI 서버용 고대역폭 메모리(HBM) 시장 선도." },
+            { corp_code: "00266961", stock_code: "035420", corp_name: "NAVER", market: "KOSPI", sector: "서비스업", sales: 96706, op_profit: 14888, net_income: 8556, assets: 342111, liabilities: 98774, equity: 243337, market_cap: 350000, per: 35.4, pbr: 1.6, roe: 5.2, biz_description_raw: "국내 1위 검색 포털. 커머스, 핀테크, 콘텐츠(웹툰), 클라우드 사업 영위. 초거대 AI HyperCLOVA X를 통한 B2B 비즈니스 확장." },
+            { corp_code: "00258801", stock_code: "035720", corp_name: "카카오", market: "KOSPI", sector: "서비스업", sales: 81058, op_profit: 5019, net_income: 1452, assets: 235112, liabilities: 91002, equity: 144110, market_cap: 250000, per: 45.1, pbr: 1.9, roe: 1.2, biz_description_raw: "카카오톡 플랫폼 기반의 모바일 라이프 스타일 플랫폼. 톡비즈, 모빌리티, 페이, 게임, 뮤직 등 다양한 서비스 제공." },
+            { corp_code: "00356361", stock_code: "068270", corp_name: "셀트리온", market: "KOSPI", sector: "의약품", sales: 24502, op_profit: 6452, net_income: 5122, assets: 65112, liabilities: 15442, equity: 49670, market_cap: 380000, per: 38.2, pbr: 3.5, roe: 10.1, biz_description_raw: "바이오시밀러(램시마, 트룩시마 등) 개발 및 생산. 글로벌 시장에서 항체 바이오의약품 판매." },
+            { corp_code: "00523414", stock_code: "247540", corp_name: "에코프로비엠", market: "KOSDAQ", sector: "화학", sales: 58112, op_profit: 3211, net_income: 2511, assets: 41223, liabilities: 20112, equity: 21111, market_cap: 220000, per: 65.2, pbr: 8.5, roe: 15.2, biz_description_raw: "2차전지 양극재(NCA, NCM) 제조 및 판매. 전기차(EV) 배터리 핵심 소재 공급." },
+            { corp_code: "01234567", stock_code: "277810", corp_name: "레인보우로보틱스", market: "KOSDAQ", sector: "기계", sales: 150, op_profit: -10, net_income: -5, assets: 3000, liabilities: 500, equity: 2500, market_cap: 35000, per: 0, pbr: 12.5, roe: -0.5, biz_description_raw: "협동로봇 및 이족보행 로봇(HUBO) 개발. 다양한 산업군(F&B, 제조)에 로봇 플랫폼 제공." }
+        ];
+
+        // --- 3. SERVICES (Data Logic) ---
+        const getOpMargin = (c) => c.sales === 0 ? 0 : ((c.op_profit / c.sales) * 100);
+
+        const parseCSV = (csvText) => {
+            const lines = csvText.split('\n');
+            const data = [];
+            for(let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                const values = line.split(','); 
+                if(values.length < 10) continue; 
+                data.push({
+                    corp_code: values[0], stock_code: values[1], corp_name: values[2], market: values[3], sector: values[4],
+                    sales: parseFloat(values[5])||0, op_profit: parseFloat(values[6])||0, net_income: parseFloat(values[7])||0,
+                    assets: parseFloat(values[8])||0, liabilities: parseFloat(values[9])||0, equity: parseFloat(values[10])||0,
+                    market_cap: parseFloat(values[11])||0, per: parseFloat(values[12])||0, pbr: parseFloat(values[13])||0,
+                    roe: parseFloat(values[14])||0, biz_description_raw: values.slice(15).join(',')
+                });
+            }
+            return data;
+        };
+
+        // Keyword Translation Map for Smart Search
+        const KEYWORD_TRANSLATIONS = {
+            '반도체': ['Semiconductor', 'Memory', 'Chip'], '배터리': ['Battery', 'EV'], '2차전지': ['Battery', 'Cathode'],
+            '바이오': ['Bio', 'Pharm'], '제약': ['Pharm', 'Medicine'], '자동차': ['Auto', 'Car', 'Mobility'],
+            '플랫폼': ['Platform', 'Internet'], '게임': ['Game'], '인공지능': ['AI', 'Data'], '로봇': ['Robot']
+        };
+
+        const parseSmartQuery = (query) => {
+            const conditions = { minSales: 0, minOpMargin: 0, targetMarket: null, sizeCategory: null, keywords: [] };
+            
+            // 1. Numeric (Subject + Value)
+            const salesMatch = query.match(/(?:sales|revenue|매출|매출액)[^\d]*(\d+)/i);
+            if (salesMatch) conditions.minSales = parseFloat(salesMatch[1]);
+
+            const marginMatch = query.match(/(?:margin|profit|op|영업이익|마진율|이익률)[^\d]*(\d+(?:\.\d+)?)/i);
+            if (marginMatch) conditions.minOpMargin = parseFloat(marginMatch[1]);
+
+            // 2. Market
+            if (query.match(/kospi|코스피|유가증권/i)) conditions.targetMarket = 'KOSPI';
+            if (query.match(/kosdaq|코스닥/i)) conditions.targetMarket = 'KOSDAQ';
+
+            // 3. Size
+            if (query.match(/large|big|대형주/i)) conditions.sizeCategory = 'LARGE';
+            else if (query.match(/mid|medium|중형주/i)) conditions.sizeCategory = 'MID';
+            else if (query.match(/small|소형주/i)) conditions.sizeCategory = 'SMALL';
+
+            // 4. Keyword Cleanup
+            let cleanQuery = query
+                .replace(/(?:sales|revenue|매출|매출액)[^\d]*(\d+)(?:억|조|원)?(?:이상|넘|초과)?/ig, '')
+                .replace(/(?:margin|profit|op|영업이익|마진율|이익률)[^\d]*(\d+(?:\.\d+)?)(?:%|프로)?(?:이상|넘|초과)?/ig, '')
+                .replace(/kospi|코스피|유가증권|kosdaq|코스닥/ig, '')
+                .replace(/large|big|대형주|mid|medium|중형주|small|소형주/ig, '')
+                .replace(/이상|초과|넘는|인|의|가|이|은|는/g, '')
+                .trim();
+            
+            const rawKeywords = cleanQuery.split(/[\s,]+/).filter(k => k.length > 0 && !k.match(/^[0-9]+$/));
+            const expanded = [];
+            rawKeywords.forEach(k => {
+                expanded.push(k);
+                if (KEYWORD_TRANSLATIONS[k]) expanded.push(...KEYWORD_TRANSLATIONS[k]);
+            });
+            conditions.keywords = expanded;
+            return conditions;
+        };
+
+        const filterCompanies = (companies, filter) => {
+            let result = companies;
+            let effSales = filter.minSales;
+            let effMargin = filter.minOpMargin;
+            let effMarket = filter.market;
+            let keywords = [];
+            let sizeFilter = filter.size; // UI filter takes precedence, or Smart filter overrides it below
+
+            if (filter.mode === 'SMART' && filter.keyword) {
+                const parsed = parseSmartQuery(filter.keyword);
+                effSales = Math.max(effSales, parsed.minSales);
+                effMargin = Math.max(effMargin, parsed.minOpMargin);
+                if (parsed.targetMarket) effMarket = parsed.targetMarket;
+                if (parsed.sizeCategory) sizeFilter = parsed.sizeCategory;
+                keywords = parsed.keywords;
+            } else if (filter.keyword) {
+                keywords = [filter.keyword];
+            }
+
+            if (effMarket !== 'ALL') result = result.filter(c => c.market === effMarket);
+            if (effSales > 0) result = result.filter(c => c.sales >= effSales);
+            if (effMargin > 0) result = result.filter(c => getOpMargin(c) >= effMargin);
+            
+            // Size: LARGE(>10T), MID(1T~10T), SMALL(<1T). Data unit: 100M KRW
+            if (sizeFilter === 'LARGE') result = result.filter(c => c.market_cap >= 100000); 
+            else if (sizeFilter === 'MID') result = result.filter(c => c.market_cap >= 10000 && c.market_cap < 100000);
+            else if (sizeFilter === 'SMALL') result = result.filter(c => c.market_cap < 10000);
+
+            if (keywords.length > 0) {
+                result = result.filter(c => {
+                    const txt = `${c.corp_name} ${c.stock_code} ${c.sector} ${c.biz_description_raw}`.toLowerCase();
+                    return keywords.every(kw => txt.includes(kw.toLowerCase()));
+                });
+            }
+            return result;
+        };
+
+        // --- 4. COMPONENTS ---
+
+        const SearchBar = ({ value, mode, onChange, onModeChange, onToggleFilters }) => (
+            <div className="relative max-w-2xl mx-auto mb-8 group">
+                <div className={`absolute -inset-1 bg-gradient-to-r rounded-xl opacity-20 group-hover:opacity-40 blur transition duration-200 ${mode === 'SMART' ? 'from-emerald-500 to-cyan-500' : 'from-blue-500 to-indigo-500'}`}></div>
+                <div className="relative flex flex-col gap-2">
+                    <div className="relative flex items-center bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+                        <div className="pl-4 text-slate-400"><Icons.Search className="w-5 h-5" /></div>
+                        <input
+                            type="text" value={value} onChange={(e) => onChange(e.target.value)}
+                            placeholder={mode === 'SMART' ? "예: 매출 1조 이상인 반도체 대형주 (자연어 검색)" : "기업명, 코드, 업종으로 빠른 검색..."}
+                            className="w-full bg-transparent border-none py-4 px-3 text-lg text-white placeholder-slate-500 focus:ring-0 focus:outline-none"
+                        />
+                        <div className="flex items-center border-l border-slate-800">
+                            <button onClick={onToggleFilters} className="p-4 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" title="필터 설정">
+                                <Icons.Sliders className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center px-1">
+                        <div className="flex items-center bg-slate-800/50 p-1 rounded-lg border border-slate-700/50">
+                            <button onClick={() => onModeChange('FAST')} className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'FAST' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-300'}`}>
+                                <Icons.Zap className="w-3 h-3" /> 빠른 검색
+                            </button>
+                            <button onClick={() => onModeChange('SMART')} className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'SMART' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-300'}`}>
+                                <Icons.Brain className="w-3 h-3" /> 스마트 검색
+                            </button>
+                        </div>
+                        <div className="text-xs text-slate-500">
+                            {mode === 'SMART' ? <span>팁: <span className="text-emerald-400">"마진율 10% 넘는 중형 바이오주"</span></span> : <span>단순 텍스트 매칭</span>}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const DetailPanel = ({ company, onClose }) => {
+            const [analysis, setAnalysis] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [apiKey, setApiKey] = useState("");
+
+            useEffect(() => { setAnalysis(null); setError(null); }, [company]);
+
+            const handleAnalyze = async () => {
+                if (!apiKey) { setError("Gemini API 키를 먼저 입력해주세요."); return; }
+                setLoading(true); setError(null);
+                
+                try {
+                    const prompt = `You are an expert financial analyst. Analyze this business description. Return ONLY raw JSON with keys: summary(string, korean), strengths(array, korean), risks(array, korean). Description: ${company.biz_description_raw}`;
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
+                    });
+                    if (!response.ok) throw new Error("API call failed");
+                    const data = await response.json();
+                    setAnalysis(JSON.parse(data.candidates[0].content.parts[0].text));
+                } catch (err) {
+                    setError("분석 실패. API Key를 확인하세요.");
+                    console.error(err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const chartData = [ { name: '매출', value: company.sales }, { name: '자산', value: company.assets }, { name: '자본', value: company.equity } ];
+            const opMargin = getOpMargin(company).toFixed(1);
+
+            return (
+                <div className="fixed inset-y-0 right-0 w-full md:w-[600px] bg-slate-900 border-l border-slate-800 shadow-2xl z-50 overflow-y-auto animate-fade-in">
+                    <div className="sticky top-0 bg-slate-900/90 backdrop-blur z-10 border-b border-slate-800 p-6 flex items-start justify-between">
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-2xl font-bold text-white">{company.corp_name}</h2>
+                                <span className="text-sm font-mono text-slate-400 bg-slate-800 px-2 py-1 rounded">{company.stock_code}</span>
+                            </div>
+                            <p className="text-emerald-400 font-medium mt-1">{company.sector} | {company.market}</p>
+                        </div>
+                        <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white"><Icons.X className="w-6 h-6" /></button>
+                    </div>
+
+                    <div className="p-6 space-y-8">
+                        <div className="bg-slate-950 p-6 rounded-xl border border-slate-800">
+                            <h3 className="text-sm uppercase text-slate-500 font-semibold mb-4 flex items-center gap-2"><Icons.Activity className="w-4 h-4" /> 재무 현황 (단위: 억원)</h3>
+                            <div className="h-48 w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={chartData}>
+                                        <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip cursor={{fill: '#1e293b'}} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f1f5f9' }} formatter={(val)=>val.toLocaleString()} />
+                                        <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                             <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-800">
+                                <div><div className="text-xs text-slate-500">영업이익률</div><div className="text-lg font-mono text-white">{opMargin}%</div></div>
+                                <div><div className="text-xs text-slate-500">PER</div><div className="text-lg font-mono text-white">{company.per?.toFixed(1) ?? '-'}x</div></div>
+                                <div><div className="text-xs text-slate-500">ROE</div><div className="text-lg font-mono text-white">{company.roe?.toFixed(1) ?? '-'}%</div></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-sm uppercase text-slate-500 font-semibold mb-3 flex items-center gap-2"><Icons.FileText className="w-4 h-4" /> 사업 내용 (요약)</h3>
+                            <div className="bg-slate-800/50 p-4 rounded-xl text-slate-300 text-sm border border-slate-700 max-h-48 overflow-y-auto">{company.biz_description_raw}</div>
+                        </div>
+
+                        <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-emerald-500/30 rounded-xl p-6 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-cyan-500"></div>
+                            <div className="flex flex-col gap-4 mb-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Icons.Bot className="w-5 h-5 text-emerald-400" /> Gemini 분석</h3>
+                                    {!analysis && !loading && <button onClick={handleAnalyze} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg">분석 시작</button>}
+                                </div>
+                                {!analysis && !loading && (
+                                    <div className="relative">
+                                        <Icons.Key className="absolute left-3 top-2.5 w-4 h-4 text-slate-500"/>
+                                        <input type="password" placeholder="Gemini API Key (저장되지 않음)" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 pl-10 text-sm text-white focus:border-emerald-500 outline-none" />
+                                    </div>
+                                )}
+                            </div>
+
+                            {loading && <div className="flex flex-col items-center py-8 text-slate-400 animate-pulse"><Icons.Bot className="w-8 h-8 mb-3 opacity-50" /><p>분석중입니다...</p></div>}
+                            {error && <div className="text-rose-400 bg-rose-950/30 p-4 rounded-lg text-sm border border-rose-900">{error}</div>}
+
+                            {analysis && (
+                                <div className="space-y-6 animate-fade-in">
+                                    <div className="text-slate-300 italic text-sm border-l-2 border-emerald-500 pl-4 py-1">"{analysis.summary}"</div>
+                                    <div><h4 className="text-emerald-400 text-xs font-bold uppercase mb-2 flex items-center gap-1"><Icons.TrendingUp className="w-3 h-3" /> 강점</h4><ul className="space-y-2">{analysis.strengths.map((s, i) => <li key={i} className="flex items-start gap-2 text-sm text-slate-300"><span className="mt-1.5 w-1 h-1 rounded-full bg-emerald-500 shrink-0"></span>{s}</li>)}</ul></div>
+                                    <div><h4 className="text-rose-400 text-xs font-bold uppercase mb-2 flex items-center gap-1"><Icons.AlertTriangle className="w-3 h-3" /> 리스크</h4><ul className="space-y-2">{analysis.risks.map((r, i) => <li key={i} className="flex items-start gap-2 text-sm text-slate-300"><span className="mt-1.5 w-1 h-1 rounded-full bg-rose-500 shrink-0"></span>{r}</li>)}</ul></div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const CompanyTable = ({ data, onSelect }) => {
+            const [page, setPage] = useState(1);
+            const ITEMS = 50;
+            const totalPages = Math.ceil(data.length / ITEMS);
+            const currentData = data.slice((page-1)*ITEMS, page*ITEMS);
+
+            useEffect(() => setPage(1), [data.length]);
+
+            if (data.length === 0) return <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700"><p className="text-slate-400">검색 결과가 없습니다.</p></div>;
+
+            return (
+                <div className="flex flex-col gap-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-950 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                                <tr>
+                                    <th className="px-6 py-4">기업명</th>
+                                    <th className="px-6 py-4">업종</th>
+                                    <th className="px-6 py-4 text-right">시가총액 (억원)</th>
+                                    <th className="px-6 py-4 text-right">매출액 (억원)</th>
+                                    <th className="px-6 py-4 text-right">이익률</th>
+                                    <th className="px-6 py-4 text-right">PER</th>
+                                    <th className="px-6 py-4 text-center">상세</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800">
+                                {currentData.map((company) => {
+                                    const opMargin = getOpMargin(company);
+                                    return (
+                                        <tr key={company.corp_code} onClick={() => onSelect(company)} className="hover:bg-slate-800/50 transition-colors cursor-pointer group">
+                                            <td className="px-6 py-4">
+                                                <div className="font-medium text-white group-hover:text-emerald-400">{company.corp_name}</div>
+                                                <div className="text-xs text-slate-500 flex gap-1"><span className={`px-1 rounded text-[10px] ${company.market==='KOSPI'?'bg-blue-900/30 text-blue-400':'bg-green-900/30 text-green-400'}`}>{company.market}</span>{company.stock_code}</div>
+                                            </td>
+                                            <td className="px-6 py-4"><span className="px-2 py-1 rounded bg-slate-800 text-slate-300 text-xs border border-slate-700">{company.sector}</span></td>
+                                            <td className="px-6 py-4 text-right font-mono text-emerald-100">{company.market_cap.toLocaleString()}</td>
+                                            <td className="px-6 py-4 text-right font-mono text-slate-300">{company.sales.toLocaleString()}</td>
+                                            <td className="px-6 py-4 text-right font-mono"><span className={opMargin>0?'text-emerald-400':'text-rose-400'}>{opMargin.toFixed(1)}%</span></td>
+                                            <td className="px-6 py-4 text-right font-mono text-slate-300">{company.per?.toFixed(1) || '-'}x</td>
+                                            <td className="px-6 py-4 text-center"><button className="p-1.5 text-slate-400 group-hover:text-white"><Icons.ChevronRight className="w-4 h-4"/></button></td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    {totalPages > 1 && (
+                        <div className="flex justify-between items-center px-2 text-slate-400 text-sm">
+                            <span>{page} / {totalPages} 페이지</span>
+                            <div className="flex gap-2">
+                                <button disabled={page===1} onClick={()=>setPage(p=>p-1)} className="p-2 bg-slate-800 rounded disabled:opacity-50 hover:bg-slate-700"><Icons.ChevronLeft className="w-4 h-4"/></button>
+                                <button disabled={page===totalPages} onClick={()=>setPage(p=>p+1)} className="p-2 bg-slate-800 rounded disabled:opacity-50 hover:bg-slate-700"><Icons.ChevronRight className="w-4 h-4"/></button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [data, setData] = useState(MOCK_DATA);
+            const [selectedCompany, setSelectedCompany] = useState(null);
+            const [showFilters, setShowFilters] = useState(false);
+            const [filters, setFilters] = useState({ keyword: '', minOpMargin: 0, minSales: 0, market: 'ALL', size: 'ALL', mode: 'SMART' });
+
+            const filteredData = useMemo(() => filterCompanies(data, filters), [data, filters]);
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        if (evt.target?.result) {
+                            const parsed = parseCSV(evt.target.result);
+                            if (parsed.length > 0) setData(parsed);
+                            else alert("CSV 파일 형식이 올바르지 않습니다.");
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+                    <header className="border-b border-slate-800 bg-slate-950/50 sticky top-0 z-40 backdrop-blur">
+                        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="bg-emerald-500 p-1.5 rounded-lg"><Icons.Cpu className="w-6 h-6 text-white" /></div>
+                                <h1 className="text-xl font-bold tracking-tight text-white">Peer<span className="text-emerald-400">Bot</span></h1>
+                            </div>
+                            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div><span className="text-xs text-emerald-500">System Ready</span></div>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
+                        <div className="mb-8">
+                            <div className="text-center mb-8">
+                                <h2 className="text-3xl font-bold text-white mb-2">Find Your Peer Group</h2>
+                                <p className="text-slate-400">KOSPI/KOSDAQ 기업을 재무 및 자연어로 검색하세요.</p>
+                            </div>
+
+                            <SearchBar 
+                                value={filters.keyword} mode={filters.mode} 
+                                onChange={(val) => setFilters(prev => ({...prev, keyword: val}))}
+                                onModeChange={(m) => setFilters(prev => ({...prev, mode: m}))}
+                                onToggleFilters={() => setShowFilters(!showFilters)} 
+                            />
+
+                            {showFilters && (
+                                <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-700 rounded-xl p-6 mb-8 shadow-xl animate-fade-in">
+                                    <div className="flex items-center gap-2 mb-4 text-emerald-400 font-semibold uppercase text-xs tracking-wider"><Icons.Filter className="w-4 h-4" /> 상세 필터</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-2">시장 구분</label>
+                                            <select className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2.5" value={filters.market} onChange={(e) => setFilters(p => ({...p, market: e.target.value}))}>
+                                                <option value="ALL">전체</option><option value="KOSPI">KOSPI</option><option value="KOSDAQ">KOSDAQ</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-2">기업 규모 (시가총액)</label>
+                                            <select className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2.5" value={filters.size} onChange={(e) => setFilters(p => ({...p, size: e.target.value}))}>
+                                                <option value="ALL">전체</option><option value="LARGE">대형주 (10조↑)</option><option value="MID">중형주 (1조~10조)</option><option value="SMALL">소형주 (1조↓)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-2">최소 매출액 (억원)</label>
+                                            <input type="number" className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2.5" value={filters.minSales} onChange={(e) => setFilters(p => ({...p, minSales: Number(e.target.value)}))} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-2">최소 영업이익률 (%)</label>
+                                            <div className="flex items-center gap-3">
+                                                <input type="range" min="0" max="50" className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" value={filters.minOpMargin} onChange={(e) => setFilters(p => ({...p, minOpMargin: Number(e.target.value)}))} />
+                                                <span className="text-white font-mono w-10 text-right">{filters.minOpMargin}%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex justify-between items-center text-sm text-slate-500 mb-4 px-2">
+                                <div>검색 결과: <span className="text-white font-bold">{filteredData.length}</span> 개 기업</div>
+                                <label className="flex items-center gap-2 cursor-pointer hover:text-emerald-400 transition-colors">
+                                    <Icons.Upload className="w-4 h-4" /><span>CSV 데이터 업로드</span><input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                                </label>
+                            </div>
+                        </div>
+
+                        <CompanyTable data={filteredData} onSelect={setSelectedCompany} />
+
+                        {selectedCompany && (
+                            <>
+                                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setSelectedCompany(null)}></div>
+                                <DetailPanel company={selectedCompany} onClose={() => setSelectedCompany(null)} />
+                            </>
+                        )}
+                    </main>
+
+                    <footer className="border-t border-slate-800 py-6 text-center text-slate-500 text-sm">
+                        <p>PeerBot &copy; 2025. Powered by Dart-FSS & Gemini.</p>
+                        <p className="mt-1">제공: Doohyun KIM & Soojeong YEON</p>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
 </html>
