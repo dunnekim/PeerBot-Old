@@ -5,14 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PeerBot - 기업 분석 및 피어 파인더</title>
     
-    <!-- 1. 필수 라이브러리 (React, Babel, Recharts, Tailwind) -->
+    <!-- 1. 필수 라이브러리 (React, Babel, Tailwind) -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- 2. Recharts 의존성 및 라이브러리 로드 (순서 중요) -->
+    <!-- Recharts UMD는 prop-types가 전역에 있어야 작동할 때가 많습니다. -->
+    <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
     
-    <!-- 2. Tailwind 커스텀 설정 -->
+    <!-- 3. Tailwind 커스텀 설정 -->
     <script>
       tailwind.config = {
         theme: {
@@ -55,13 +59,19 @@
 <body>
     <div id="root"></div>
 
-    <!-- 3. 통합 애플리케이션 로직 (Babel이 JSX를 변환) -->
+    <!-- 4. 통합 애플리케이션 로직 -->
     <script type="text/babel">
-        // React & Recharts 전역 객체 사용
+        // 전역 객체에서 React 기능 가져오기
         const { useState, useEffect, useMemo } = React;
-        const { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } = Recharts;
+        
+        // Recharts가 로드되었는지 확인하고 가져오기
+        const Recharts = window.Recharts;
+        if (!Recharts) {
+            console.error("Recharts library failed to load.");
+        }
+        const { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } = Recharts || {};
 
-        // --- 1. ICONS (Lucide 의존성 제거, 순수 SVG 사용) ---
+        // --- 아이콘 컴포넌트 (SVG) ---
         const Icon = ({ path, className }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 {path}
@@ -77,7 +87,6 @@
             Filter: (p) => <Icon {...p} path={<><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>} />,
             Upload: (p) => <Icon {...p} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></>} />,
             X: (p) => <Icon {...p} path={<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>} />,
-            Bot: (p) => <Icon {...p} path={<><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></>} />,
             TrendingUp: (p) => <Icon {...p} path={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>} />,
             AlertTriangle: (p) => <Icon {...p} path={<><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>} />,
             ChevronRight: (p) => <Icon {...p} path={<><path d="m9 18 6-6-6-6"/></>} />,
@@ -87,7 +96,7 @@
             Key: (p) => <Icon {...p} path={<><path d="m21 2-2 2m-7.6 7.6a6.5 6.5 0 1 1-5.3-5.3"/><circle cx="8" cy="8" r="3"/><path d="M7 17v5"/><path d="M12 17v2"/><path d="M17 12v5"/></>} />
         };
 
-        // --- 2. CONSTANTS (Mock Data) ---
+        // --- 데이터 (Mock Data) ---
         const MOCK_DATA = [
             { corp_code: "00126380", stock_code: "005930", corp_name: "삼성전자", market: "KOSPI", sector: "전기전자", sales: 3022314, op_profit: 433766, net_income: 399074, assets: 4484245, liabilities: 936749, equity: 3547496, market_cap: 4500000, per: 15.2, pbr: 1.4, roe: 11.5, biz_description_raw: "DX부문(모바일, TV), DS부문(메모리, 시스템LSI, 파운드리), SDC, Harman으로 구성. 글로벌 메모리 반도체 시장 점유율 1위 유지." },
             { corp_code: "00164779", stock_code: "000660", corp_name: "SK하이닉스", market: "KOSPI", sector: "전기전자", sales: 446216, op_profit: 68094, net_income: 22416, assets: 1039754, liabilities: 388523, equity: 651231, market_cap: 950000, per: 22.1, pbr: 1.8, roe: 4.5, biz_description_raw: "DRAM, NAND Flash, MCP 등 메모리 반도체 생산 및 판매. AI 서버용 고대역폭 메모리(HBM) 시장 선도." },
@@ -98,7 +107,7 @@
             { corp_code: "01234567", stock_code: "277810", corp_name: "레인보우로보틱스", market: "KOSDAQ", sector: "기계", sales: 150, op_profit: -10, net_income: -5, assets: 3000, liabilities: 500, equity: 2500, market_cap: 3500, per: 0, pbr: 12.5, roe: -0.5, biz_description_raw: "협동로봇 및 이족보행 로봇(HUBO) 개발. 다양한 산업군(F&B, 제조)에 로봇 플랫폼 제공." }
         ];
 
-        // --- 3. SERVICES (Data Logic) ---
+        // --- 데이터 처리 로직 ---
         const getOpMargin = (c) => c.sales === 0 ? 0 : ((c.op_profit / c.sales) * 100);
 
         const parseCSV = (csvText) => {
@@ -138,6 +147,7 @@
         const parseSmartQuery = (query) => {
             const conditions = { minSales: 0, minOpMargin: 0, targetMarket: null, sizeCategory: null, keywords: [] };
             
+            // 1. 숫자/키워드 파싱 (한글 지원)
             const salesMatch = query.match(/(?:sales|revenue|매출|매출액)[^\d]*(\d+)/i);
             if (salesMatch) conditions.minSales = parseFloat(salesMatch[1]);
 
@@ -151,6 +161,7 @@
             else if (query.match(/mid|medium|중형주/i)) conditions.sizeCategory = 'MID';
             else if (query.match(/small|소형주/i)) conditions.sizeCategory = 'SMALL';
 
+            // 2. 검색어 정제
             let cleanQuery = query
                 .replace(/(?:sales|revenue|매출|매출액)[^\d]*(\d+)(?:억|조|원)?(?:이상|넘|초과)?/ig, '')
                 .replace(/(?:margin|profit|op|영업이익|마진율|이익률)[^\d]*(\d+(?:\.\d+)?)(?:%|프로)?(?:이상|넘|초과)?/ig, '')
@@ -205,7 +216,7 @@
             return result;
         };
 
-        // --- 4. COMPONENTS ---
+        // --- 컴포넌트 정의 ---
 
         const SearchBar = ({ value, mode, onChange, onModeChange, onToggleFilters }) => (
             <div className="relative max-w-2xl mx-auto mb-8 group">
@@ -287,6 +298,7 @@
                     </div>
 
                     <div className="p-6 space-y-8">
+                        {ResponsiveContainer && (
                         <div className="bg-slate-950 p-6 rounded-xl border border-slate-800">
                             <h3 className="text-sm uppercase text-slate-500 font-semibold mb-4 flex items-center gap-2"><Icons.Activity className="w-4 h-4" /> 재무 현황 (단위: 억원)</h3>
                             <div className="h-48 w-full">
@@ -304,9 +316,10 @@
                                 <div><div className="text-xs text-slate-500">ROE</div><div className="text-lg font-mono text-white">{company.roe?.toFixed(1) ?? '-'}%</div></div>
                             </div>
                         </div>
+                        )}
 
                         <div>
-                            <h3 className="text-sm uppercase text-slate-500 font-semibold mb-3 flex items-center gap-2"><Icons.FileText className="w-4 h-4" /> 사업 내용 (요약)</h3>
+                            <h3 className="text-sm uppercase text-slate-500 font-semibold mb-3 flex items-center gap-2"><Icons.FileText className="w-4 h-4" /> 사업 내용 (원문)</h3>
                             <div className="bg-slate-800/50 p-4 rounded-xl text-slate-300 text-sm border border-slate-700 max-h-48 overflow-y-auto custom-scrollbar">{company.biz_description_raw}</div>
                         </div>
 
