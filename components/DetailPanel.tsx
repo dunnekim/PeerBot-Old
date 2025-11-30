@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CompanyData, AnalysisResult } from '../types';
-import { X, Bot, TrendingUp, AlertTriangle, FileText, Activity } from 'lucide-react';
+import { X, Bot, TrendingUp, AlertTriangle, FileText, Activity, Key } from 'lucide-react';
 import { analyzeBusiness } from '../services/geminiService';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
 
 interface DetailPanelProps {
   company: CompanyData | null;
@@ -13,8 +13,9 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ company, onClose }) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState('');
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Reset analysis when company changes
     setAnalysis(null);
     setError(null);
@@ -23,13 +24,18 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ company, onClose }) => {
   if (!company) return null;
 
   const handleAnalyze = async () => {
+    if (!apiKey) {
+      setError("Google Gemini API 키를 입력해주세요.");
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
-      const result = await analyzeBusiness(company.biz_description_raw);
+      const result = await analyzeBusiness(company.biz_description_raw, apiKey);
       setAnalysis(result);
     } catch (err) {
-      setError("분석에 실패했습니다. API 키 설정을 확인해주세요.");
+      setError("분석에 실패했습니다. 올바른 API Key인지 확인해주세요.");
     } finally {
       setLoading(false);
     }
@@ -40,6 +46,8 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ company, onClose }) => {
     { name: '자산', value: company.assets },
     { name: '자본', value: company.equity },
   ];
+
+  const opMargin = company.sales > 0 ? ((company.op_profit / company.sales) * 100).toFixed(1) : '0.0';
 
   return (
     <div className="fixed inset-y-0 right-0 w-full md:w-[600px] bg-slate-900 border-l border-slate-800 shadow-2xl transform transition-transform duration-300 ease-in-out z-50 overflow-y-auto">
@@ -85,15 +93,15 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ company, onClose }) => {
           <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-800">
             <div>
                <div className="text-xs text-slate-500">영업이익률</div>
-               <div className="text-lg font-mono text-white">{((company.op_profit / company.sales) * 100).toFixed(1)}%</div>
+               <div className="text-lg font-mono text-white">{opMargin}%</div>
             </div>
             <div>
                <div className="text-xs text-slate-500">PER</div>
-               <div className="text-lg font-mono text-white">{company.per ?? '-'}x</div>
+               <div className="text-lg font-mono text-white">{company.per?.toFixed(1) ?? '-'}x</div>
             </div>
             <div>
                <div className="text-xs text-slate-500">ROE</div>
-               <div className="text-lg font-mono text-white">{company.roe ?? '-'}%</div>
+               <div className="text-lg font-mono text-white">{company.roe?.toFixed(1) ?? '-'}%</div>
             </div>
           </div>
         </div>
@@ -112,18 +120,40 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ company, onClose }) => {
         <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-emerald-500/30 rounded-xl p-6 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-cyan-500"></div>
           
-          <div className="flex items-center justify-between mb-4">
-             <h3 className="text-lg font-bold text-white flex items-center gap-2">
-               <Bot className="w-5 h-5 text-emerald-400" />
-               Gemini 기업 분석
-             </h3>
+          <div className="flex flex-col gap-4 mb-4">
+             <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Bot className="w-5 h-5 text-emerald-400" />
+                  Gemini 기업 분석
+                </h3>
+                {/* Analyze Button */}
+                {!analysis && !loading && (
+                   <button 
+                    onClick={handleAnalyze}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-lg shadow-emerald-900/20"
+                   >
+                     분석 시작
+                   </button>
+                 )}
+             </div>
+
+             {/* API Key Input for Static Site (GitHub Pages) */}
              {!analysis && !loading && (
-               <button 
-                onClick={handleAnalyze}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-lg shadow-emerald-900/20"
-               >
-                 분석 시작
-               </button>
+               <div className="relative">
+                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                   <Key className="w-4 h-4 text-slate-500" />
+                 </div>
+                 <input 
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Gemini API Key를 입력하세요 (저장되지 않음)"
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-300 focus:outline-none focus:border-emerald-500 placeholder-slate-600"
+                 />
+                 <p className="text-[10px] text-slate-500 mt-1 pl-1">
+                   * GitHub Pages와 같은 정적 환경에서는 보안을 위해 API Key를 직접 입력해야 합니다.
+                 </p>
+               </div>
              )}
           </div>
 
@@ -141,7 +171,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ company, onClose }) => {
           )}
 
           {analysis && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-6 animate-fade-in mt-4">
               <div className="text-slate-300 italic text-sm border-l-2 border-emerald-500 pl-4 py-1">
                 "{analysis.summary}"
               </div>
